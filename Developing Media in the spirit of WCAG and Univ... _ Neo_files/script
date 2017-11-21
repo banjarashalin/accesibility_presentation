@@ -1,0 +1,1375 @@
+// PUBLIC
+
+function viewNode (media_id, params) {
+  document.write(getDurationedMediaViewer(media_id, params));
+}
+
+function viewSlideshow (video_id, params) {
+  params.slideshow = true;
+  params.server_detection = true;
+  document.write(getVideoViewer(video_id, params));
+}
+
+function getVideoViewer (video_id, params) {
+  return getDurationedMediaViewer(video_id, params);
+}
+
+function viewAlbum (album_id, params) {
+  document.write(getAlbumViewer(album_id, params));
+}
+
+
+
+// DEPRECATED
+// Customers should not use these functions, and should replace any
+// existing references to them with the public functions above.
+
+function getPlaylistViewer (playlist, params) {
+  return getVideoViewer(playlist[0]['video_id'], params);
+}
+
+function viewList (playlist, params) {
+  document.write(getPlaylistViewer(playlist, params));
+}
+
+// (internal use)
+var playlistCount;
+function getPlaylist (playlist_id, params) {
+  if (playlistCount === undefined) {
+    playlistCount = 1;
+  } else {
+    playlistCount += 1;
+  }
+  if (!params) {
+    params = {};
+  }
+  if (!params.width) {
+    params.width = 320;
+  }
+  if (!params.player_height) {
+    params.player_height = 263;
+  }
+  if (!params.carousel_height) {
+    params.carousel_height = 100;
+  }
+  var playerObjectId = "embedded_playlist_player";
+  if (playlistCount > 1) {
+    playerObjectId += playlistCount;
+  }
+  var playlistObjectId = "embedded_playlist";
+  if (playlistCount > 1) {
+    playlistObjectId += playlistCount;
+  }
+  var feedUrl = getBaseUrl() + '/playlists/' + encodeURIComponent(playlist_id) +
+    '.rss';
+  var out = '<object data="' + getBaseUrl() + '/plugins/player.swf" \
+type="application/x-shockwave-flash" width="' + escape(params.width) + '" \
+height="' + escape(params.player_height) + '" \
+name="' + playerObjectId + '" id="' + playerObjectId + '">\
+<param name="allowfullscreen" value="true"/>\
+<param name="allowscriptaccess" value="always"/>\
+<param name="base" value="' + getBaseUrl() + '"/>\
+<param name="bgcolor" value="#000000"/>\
+<param name="flashVars" value="feed=' + feedUrl + '\
+&playlistObjectId=' + playlistObjectId + '"/>\
+<param name="movie" value="' + getBaseUrl() + '/plugins/player.swf"/>\
+</object>\
+<br/>\
+<object data="' + getBaseUrl() + '/plugins/carousel.swf" \
+width="' + escape(params.width) + '\
+" height="' + escape(params.carousel_height) + '\
+" type="application/x-shockwave-flash" id="' + playlistObjectId + '">\
+<param name="allownetworking" value="all"/>\
+<param name="allowscriptaccess" value="always"/>\
+<param name="bgcolor" value="#000000"/>\
+<param name="flashVars" value="feed=' + feedUrl + '\
+&playerObjectId=' + playerObjectId + '"/>\
+<param name="movie" value="' + getBaseUrl() + '/plugins/carousel.swf"/>\
+<param name="quality" value="high"/>\
+</object>';
+  return out;
+}
+
+
+
+// INTERNAL
+// Customers should not use any code below this point.
+
+var VERSION = '4.5.1';
+var CDN_OFF = true;
+
+var OVERRIDABLE_FLASHVARS = [ 'auth_token', 'ga_user', 'logo_image_url',
+  'subtitle_language' ];
+
+var additionalFlashvars = {};
+
+var main_video_played = true; //true by default without ads
+var preroll_played = false;
+var src_params;
+
+MediaService = {
+  getAlbumViewer: function (album_id, params) {
+    if (!params) {
+      params = {};
+    }
+    if (!params.width) {
+      params.width = 800;
+    }
+    if (!params.height) {
+      params.height = 600;
+    }
+    var srcUrl = getBaseUrl() + '/albums/' + album_id + '?iframe_width=' +
+      params.width + '&iframe_height=' + params.height;
+    if (params.image_profile) {
+      srcUrl += "&p="+params.image_profile;
+    }
+    return '<iframe width="' + escape(params.width) + '" height="' +
+      escape(params.height) + '" frameborder="0" src="' + srcUrl + '"></iframe>';
+  },
+
+  getDurationedMediaViewer: function (video_id, params) {
+    if (!video_id) { return "No video ID"; }
+
+    params = getDefaultParams(params);
+    var src_params = getSrcParams(video_id, params) + '&version=' + VERSION;
+    var srcUrl = getSrcUrl(video_id, params) + '?voxtoken=system&' + src_params;
+    var paramsType = (typeof params.server_detection);
+
+    if (paramsType === "boolean") { return jsEmbed(params, srcUrl); }
+
+    //legacy
+    if (mobileBrowser() == "Safari") {
+      return videoTag(video_id, params.width, params.height,
+        params.mobile_format_name, false);
+    } else if (mobileBrowser()) {
+      return downloadLink(video_id, params.width, params.height,
+        params.mobile_format_name);
+    }
+    return iframeTag(params.width, params.height, srcUrl);
+  },
+
+  getDefaultParams: function (params) {
+    if (!params) {
+      params = {};
+    }
+    if (params.server_detection !== true) {
+      if (!params.height) {
+        params.height = 263;
+      }
+      if (!params.width) {
+        params.width = 320;
+      }
+    }
+    return params;
+  },
+
+  jsEmbed: function (params, srcUrl) {
+   if (params.server_detection === true) {
+     addAdditionalFlashVars(params);
+     return serverTag(srcUrl);
+   } else if (params.server_detection === false) {
+     return "";
+   }
+  },
+
+  addAdditionalFlashVars: function (params) {
+    for (var key in params) {
+      if (key.indexOf('reporting_fields[') === 0 ||
+          MediaService.hasElement(OVERRIDABLE_FLASHVARS, key)) {
+        additionalFlashvars[key] = params[key];
+      }
+    }
+  },
+
+  hasElement: function (arr, element) {
+    for (var i=0; i<arr.length; i++) {
+        if (arr[i] === element) {
+            return true;
+        }
+    }
+    return false;
+  },
+
+  serverTag: function (u) {
+    return '<script type="text/javascript" charset="utf-8" src="'+u+'"></script>';
+  },
+
+
+  getSrcParams: function (video_id, params) {
+    src_params = getCommonParamsString(params);
+    if (params.asset_id) {
+      src_params += "&asset_id=" + params.asset_id;
+    }
+    if (params.video_format_name) {
+      src_params += "&video_format_name=" + params.video_format_name;
+    }
+    //server detection should always be true for audio/track embed.
+    if (video_id.charAt(0) == 't') {
+      params.server_detection = true;
+    }
+    src_params += "&userAgent="+getSimplifiedUserAgent();
+    if (params.server_detection === true) {
+      params["userAgent"] = getSimplifiedUserAgent();
+      //append the current url to use with stats
+      var currentUrl = getCurrentUrl();
+      src_params += "&currentUrl=" + currentUrl;
+      params.currentUrl = currentUrl;
+      //flash version
+      params.flash = getFlashVersion();
+      src_params += "&flash=" + params.flash;
+      params.html5 = getHTML5VideoEnabled();
+      src_params += "&html5=" + params.html5;
+      params.silverlight = getSilverlightVersion();
+      src_params += "&silverlight=" + params.silverlight;
+      if (params.silverlight_player == "jwplayer"){
+        src_params += "&silverlight_player=" + params.silverlight_player;
+      }
+      if (params.console_asset_preview === true){
+        src_params += "&console_asset_preview=" + params.console_asset_preview;
+      }
+      var options = [ 'use_silverlight', 'jsonp_variable', 'jsonp_callback',
+        'autoplay', 'slideshow' ];
+      for (var i=0; i<options.length; i++) {
+        if (params[options[i]] != null) {
+          src_params += "&" + options[i] + "=" + params[options[i]];
+        }
+      }
+    }
+    return encodeURI(src_params);
+  },
+
+  getCommonParamsString: function (params) {
+    var arr = [];
+    if (params.width) {
+      arr.push("width=" + params.width);
+    }
+    if (params.height) {
+      arr.push("height=" + params.height);
+    }
+    if (params.feed) {
+      arr.push("feed=" + encodeURIComponent(params.feed));
+    }
+    if (params.config) {
+      arr.push("config=" + encodeURIComponentSpecial(params.config));
+    }
+    if (params.logo_opacity != null) {
+      arr.push("logo_opacity=" + params.logo_opacity);
+    }
+    var keys =  ['aspectratio', 'signature', 'player_profile', 'company_id', 'subtitle_language', 'auto_advance', 'player_id', 'ignore_ga', 'logo_image_id', 'logo_image_url', 'auth_token', 'logo_position', 'logo_target_url', 'ignore_stream_switching' ];
+    for (var i=0; i<keys.length; i++) {
+      if (params[keys[i]]) {
+        arr.push(keys[i] + "=" + params[keys[i]]);
+      }
+    }
+    return arr.join("&");
+  },
+
+  encodeURIComponentSpecial: function (value) {
+    value = __JSON.stringify(value);
+    //value = value.replace(/\./g, '%46');
+    value = encodeURIComponent(value);
+    return value;
+  },
+
+  getSrcUrl: function (video_id, params) {
+    var baseUrl = getUrl(params, false);
+    var hash = getHash(params);
+    var subUrl;
+    var extension;
+    var mediaType = (video_id.charAt(0) == 't' ? "tracks/" : "videos/");
+    if (params.server_detection === true){
+      subUrl = '/embeds/' + mediaType;
+      extension = '.json';
+    } else {
+      subUrl = '/assets/';
+      extension = '';
+    }
+    return baseUrl + subUrl + encodeURIComponent(video_id)+ '/' + hash +
+      extension;
+  },
+
+  getPlaylistPlayer: function (feed, params) {
+    if (!feed) { return "No feed"; }
+
+    var id = feed;
+    id = id.replace(/^https?:\/\/[^\/]+\//, '');
+    // strip question mark and query parameters
+    id = id.replace(/\?.*$/, '');
+
+    params.feed = encodeURIComponent(feed);
+    params["userAgent"] = getSimplifiedUserAgent();
+    params.flash = getFlashVersion();
+    params.html5 = getHTML5VideoEnabled();
+    params.width = encodeURIComponent(params.width);
+    params.height = encodeURIComponent(params.height);
+
+    params = getDefaultParams(params);
+    src_params = getCommonParamsString(params);
+    //append the current url to use with stats
+    var currentUrl = getCurrentUrl();
+    src_params += "&currentUrl=" + currentUrl;
+
+    var baseUrl = getUrl(params, false);
+
+    var keys =  [ 'feed', 'userAgent', 'flash', 'html5', 'player_id' ];
+    for (var i=0; i<keys.length; i++) {
+      if (params[keys[i]]) {
+        src_params += "&" + keys[i] + "=" + params[keys[i]];
+      }
+    }
+    var hash = getHash(params);
+    var srcUrl = baseUrl + '/embeds/' + id + "/" + hash + '.json';
+    src_params += '&version=' + VERSION;
+    srcUrl += '?voxtoken=system&' + src_params;
+    addAdditionalFlashVars(params);
+    return serverTag(srcUrl);
+  },
+
+  getHash: function (params) {
+    var hash = hex_md5(src_params);
+    if (params.player_profile && params.player_profile !== ''){
+      hash += '-' + params.player_profile;
+    }
+    return hash;
+  },
+
+  getUrl: function (params, isPlayList) {
+    var baseUrl;
+    if (CDN_OFF || params.cdn == 'off'){
+      baseUrl = getBaseUrl();
+    } else if (!isTwistage() && isPlayList) {
+      // if its not a twistage url, then we have to return
+      // the base url  because if we try to use assets url
+      // it will cause the javascript callbacks to not work
+      // refs #1733
+      baseUrl = getBaseUrl();
+    } else {
+      baseUrl = getAssetsUrl();
+    }
+    return baseUrl;
+  },
+
+  isTwistage: function() {
+    // this checks to see if the embedded script is in the twistage subdomain
+    var scripts = document.getElementsByTagName('script');
+    for (var i=0; i<scripts.length; i++) {
+      var src = scripts[i].src;
+      if (src.indexOf('/api/script') != -1 && src.indexOf('twistage.com') != -1){
+        // this is twistage domain, return true
+        return true;
+      }
+    }
+    return false;
+  },
+
+  viewPlaylistPlayer: function (feed, params) {
+    document.write(getPlaylistPlayer(feed, params));
+  },
+
+
+
+   // GET ENVIRONMENT
+
+  getCurrentUrl: function() {
+    return window.location.protocol + "//" + window.location.host +
+      window.location.pathname;
+  },
+
+  getBaseUrl: function () {
+    try {
+      var scripts = document.getElementsByTagName('script');
+      for (var i=0; i<scripts.length; i++) {
+        if (scripts[i].src.indexOf('/api/script') != -1) {
+          return scripts[i].src.replace(/\/api\/script.*/, '');
+        }
+      }
+    } catch (e) {
+    }
+    return 'http://service.twistage.com';
+  },
+
+  getAssetsUrl: function () {
+    try {
+      var scripts = document.getElementsByTagName('script');
+      var base = '';
+      for (var i=0; i<scripts.length; i++) {
+        if (scripts[i].src.indexOf('/api/script') != -1) {
+          base = scripts[i].src.replace(/\/api\/script.*/, '');
+          break;
+        }
+      }
+      if (base.indexOf('.') == -1) {
+        // this is most likely a local network, just return the base name
+        return base;
+      } else if (base.indexOf('service-staging.twistage.com') != -1 ||
+                 base.indexOf('http://twistage-staging') != -1)       {
+        return 'http://assets-staging.twistage.com';
+      } else {
+        return 'http://assets.twistage.com';
+      }
+    } catch (e) {
+    }
+    return 'http://assets.twistage.com';
+  },
+
+  getOS: function () {
+    var osArray = ['Windows',
+          'Macintosh',
+          'Android',
+          'iPod',
+          'iPad',
+          'iPhone',
+          'Linux',
+          'BlackBerry',
+          'PlayBook'
+            ];
+    var os =  matchUserAgent(osArray);
+    var ver;
+    if (os == "iPhone" && (ver = navigator.userAgent.match(/OS \d*/))){
+      ver = ver[0].replace(/OS /,"");
+      os = "iPhone" + ver;
+    }
+    else if (os == "iPad" && (ver = navigator.userAgent.match(/OS \d*/))){
+      ver = ver[0].replace(/OS /,"");
+      if (parseInt(ver) >= 5)
+      ver = "2";
+      else
+      ver = "";
+      os = "iPad" + ver;
+    }
+    return os;
+  },
+
+  navigatorUserAgent: function () {
+    return navigator.userAgent;
+  },
+
+  getBrowser: function () {
+    var browserArray = [
+      'MSIE',
+      {'Trident': 'MSIE'},
+      'Firefox',
+      'Chrome',
+      'Safari',
+      'Opera'
+      ];
+    return matchUserAgent(browserArray);
+  },
+
+  matchUserAgent: function (array) {
+    var expectedPattern, matchedName;
+    for(var i=0;i<array.length;i++){
+      if (typeof array[i] == 'object') {
+        expectedPattern = Object.keys(array[i])[0]; // key
+        matchedName     = array[i][expectedPattern]; // value
+      } else {
+        expectedPattern = matchedName = array[i];
+      }
+      if (MediaService.navigatorUserAgent().match(expectedPattern)){
+        return matchedName;
+      }
+    }
+    return "Unknown";
+  },
+
+  getSimplifiedUserAgent: function () {
+    return getOS()+"_"+getBrowser();
+  },
+
+  getSilverlightVersion: function() {
+    var silverlightVersion;
+    try {
+      try {
+        var control = new ActiveXObject('AgControl.AgControl');
+        if (control.IsVersionSupported("3.0")){
+          silverlightVersion = 3;
+        } else {
+          if (control.IsVersionSupported("2.0")){
+            silverlightVersion = 2;
+          } else {
+            silverlightVersion = 1;
+          }
+        }
+        control = null;
+      } catch (e) {
+        var plugin = navigator.plugins["Silverlight Plug-In"];
+        if (plugin) {
+          silverlightVersion = parseInt(plugin.description[0], 10);
+        } else {
+          silverlightVersion = 0;
+        }
+      }
+    } catch (e) {
+      silverlightVersion = 0;
+    }
+    return silverlightVersion;
+  },
+
+  getFlashVersion: function () {
+    var flashVersion = '0';
+    var x;
+    if (window.ActiveXObject) {
+      // IE
+      for (x = 2; x <= 10; x++) {
+        try {
+          var oFlash = eval("new ActiveXObject('ShockwaveFlash.ShockwaveFlash." + x + "');");
+          if (oFlash) {
+            flashVersion = x + '.0';
+          }
+        } catch(e) {
+        }
+      }
+    } else if (navigator.plugins && navigator.plugins.length) {
+      // Every other browser
+      for (x = 0; x < navigator.plugins.length; x++) {
+        if (navigator.plugins[x].name.indexOf('Shockwave Flash') != -1) {
+          flashVersion = navigator.plugins[x].description.split('Shockwave Flash ')[1];
+          break;
+        }
+      }
+    }
+    return flashVersion;
+  },
+
+  getHTML5VideoEnabled: function () {
+    var e = document.createElement('video');
+    return typeof(e.canPlayType) == 'function';
+  },
+
+
+
+  // Begin pre-server_detection legacy
+
+  mobileBrowser: function () {
+    if (navigator.userAgent.match(/BlackBerry/)) {
+      return "Blackberry";
+    } else if (navigator.userAgent.match(/Opera Mini/)) {
+      return "Opera";
+    } else if (navigator.userAgent.match(/Android.*AppleWebKit.*Safari/)) {
+      return "Android";
+    } else if (navigator.userAgent.match(/AppleWebKit.*Mobile.*Safari/)) {
+      return "Safari";
+    } else {
+      return false;
+    }
+  },
+
+  iframeTag: function (width, height, u) {
+    if (!navigator.userAgent.match(/MSIE/)) {
+      height = parseInt(height, 10);
+      height += 1;
+    }
+    return '<iframe id="twistage_view_iframe" name="twistage_view_iframe"' +
+      ' allowtransparency="true" scrolling="no" frameborder="0" style=""' +
+      ' width="' + escape(width) + '" height="' + escape(height) + '" src="' + u +
+      '"></iframe>';
+  },
+
+  videoTag: function (video_id, width, height, mobileFormatName, useDevicesRoute) {
+    var imageUrl = getMobileScreenshotUrl(video_id, width);
+    var videoUrl = getMobileVideoUrl(video_id, mobileFormatName, useDevicesRoute);
+    var ret = '<video width="' + width + '" height="' + height +'" src="' +
+      videoUrl + '" poster="' + imageUrl + '" controls="true"></video>';
+    return ret;
+  },
+
+  downloadLink: function (video_id, width, height, mobileFormatName) {
+    var imageUrl = getMobileScreenshotUrl(video_id, width);
+    var videoUrl = getMobileVideoUrl(video_id, mobileFormatName,false);
+    var playButtonUrl = getBaseUrl() + '/assets/icons/silver_watch2.png';
+
+    var ret;
+    if (document.getElementsByTagName === undefined) { // cheap hack to detect modern browsers
+      // it is an older browser, use a simple image followed by a link below
+      ret = '<a style="outline: none" href="' + videoUrl +
+        '"><img border=0 src="' + imageUrl + '"</a><br/>';
+      ret += '<a style="outline: none" href="' + videoUrl + '">' +
+        '<img width="16" border=0 src="' + playButtonUrl + '"/> Play video</a>';
+    } else {
+      // browser is probably capable of rendering DHTML properly
+      ret = '<div style="position: relative; width: ' + width + 'px; \
+  height: ' + height + 'px"><table style="position: absolute; top: 0px; \
+  left: 0px; width: ' + width + 'px; height: ' + height + 'px" \
+  width="' + width + 'px" height="' + height + 'px" border=0>\
+  <tr>\
+  <td align="center" valign="middle">\
+  <a style="outline: none" href="' + videoUrl + '">\
+  <img border=0 src="' + imageUrl + '"</a>\
+  </td>\
+  </tr>\
+  </table>\
+  <table style="position: absolute; top: 0px; left: 0px; \
+  width: ' + width + 'px; height: ' + height + 'px" width="' + width + '\
+  px" height="' + height + 'px" border=0>\
+  <tr>\
+  <td align="center" valign="middle">\
+  <a style="opacity: 0.7; outline: none" href="' + videoUrl + '"><img border=0 \
+  src="' + playButtonUrl + '"/></a>\
+  </td>\
+  </tr>\
+  </table>\
+  &nbsp;\
+  </div>';
+    }
+
+    return ret;
+  },
+
+  getMobileScreenshotUrl: function (video_id, width) {
+    return getBaseUrl() + '/videos/' + video_id + '/screenshots/' + width +
+      'w.jpg';
+  },
+
+  getMobileVideoUrl: function (video_id, mobileFormatName, useDevicesRoute) {
+    var videoUrl;
+    if (useDevicesRoute){
+      videoUrl = getBaseUrl() + '/videos/' + video_id + '/devices/' +
+        getSimplifiedUserAgent() + "/play" + getExtension() +
+        "?voxtoken=system&ua=" + encodeURI(navigator.userAgent);
+    } else {
+      videoUrl = getBaseUrl2() + '/videos/' + video_id;
+      if (mobileFormatName) {
+        videoUrl += '/formats/' + mobileFormatName;
+      }
+      videoUrl += '/play.mp4';
+    }
+    return videoUrl;
+  },
+
+  getBaseUrl2: function () {
+    try {
+      var scripts = document.getElementsByTagName('script');
+      for (var i=0; i<scripts.length; i++) {
+        if (scripts[i].src.indexOf('/api/script') != -1) {
+          if (scripts[i].src.indexOf('-staging.twistage.com') != -1) {
+            return 'http://mobile-staging.twistage.com';
+          }
+          break;
+        }
+      }
+    } catch (e) {
+    }
+    return 'http://mobile.twistage.com';
+  },
+
+  getExtension: function () {
+    if (getBrowser() == 'Firefox') {
+      return ['.ogg', '.mp4', '.webm'];
+    } else if (getBrowser() == 'Chrome') {
+      return [ '.webm', '.mp4', '.ogg'];
+    } else {
+      return ['.mp4'];
+    }
+  }
+
+  // End pre-server_detection legacy
+};
+
+
+
+// Temporary wrappers to avoid references conflicts with other files
+// (for MediaService)
+
+is_twistage = MediaService.isTwistage;
+get_hash = MediaService.getHash;
+
+getAlbumViewer = MediaService.getAlbumViewer;
+getDurationedMediaViewer = MediaService.getDurationedMediaViewer;
+getDefaultParams = MediaService.getDefaultParams;
+jsEmbed = MediaService.jsEmbed;
+addAdditionalFlashVars = MediaService.addAdditionalFlashVars;
+serverTag = MediaService.serverTag;
+getSrcParams = MediaService.getSrcParams;
+getCommonParamsString = MediaService.getCommonParamsString;
+encodeURIComponentSpecial = MediaService.encodeURIComponentSpecial;
+getSrcUrl = MediaService.getSrcUrl;
+getPlaylistPlayer = MediaService.getPlaylistPlayer;
+getHash = MediaService.getHash;
+getUrl = MediaService.getUrl;
+isTwistage = MediaService.isTwistage;
+viewPlaylistPlayer = MediaService.viewPlaylistPlayer;
+getCurrentUrl = MediaService.getCurrentUrl;
+getBaseUrl = MediaService.getBaseUrl;
+getAssetsUrl = MediaService.getAssetsUrl;
+getOS = MediaService.getOS;
+getBrowser = MediaService.getBrowser;
+matchUserAgent = MediaService.matchUserAgent;
+getSimplifiedUserAgent = MediaService.getSimplifiedUserAgent;
+getSilverlightVersion = MediaService.getSilverlightVersion;
+getFlashVersion = MediaService.getFlashVersion;
+getHTML5VideoEnabled = MediaService.getHTML5VideoEnabled;
+mobileBrowser = MediaService.mobileBrowser;
+iframeTag = MediaService.iframeTag;
+videoTag = MediaService.videoTag;
+downloadLink = MediaService.downloadLink;
+getMobileScreenshotUrl = MediaService.getMobileScreenshotUrl;
+getMobileVideoUrl = MediaService.getMobileVideoUrl;
+getBaseUrl2 = MediaService.getBaseUrl2;
+getExtension = MediaService.getExtension;
+
+
+
+// Ad integration setup
+
+function liverailSetup (player_id, publisherId, format) {
+  var isIphone = (/ip(hone|od)/i.test(navigator.userAgent));
+  // if it is playing on a playlist on an iPhone
+  // then don't use liverail (jwplayer uses its own liverail plugin)
+  if ((isIphone) && (typeof HTML5_PLAYER != "undefined")) {
+    return;
+  }
+  // reset boolean flags
+  main_video_played = false;
+
+  var player = document.getElementById(player_id);
+  var mainVideoDuration = player.duration;
+  var adManager = new LiveRail.AdManager({
+    target: player
+  });
+  var config = {
+    LR_PUBLISHER_ID: publisherId
+  };
+  if (format) {
+    config[LR_FORMAT] = 'video/'+format;
+  }
+  adManager.initAds(config);
+  var startPreroll = function() {
+    // work-around for playing liverail ads with flowplayer on iphone. Only on
+    // iphone, for flowplayer, when manually change src of the video tag, the
+    // duration of the secondly loaded is not updated and still use the duration
+    // of the first loaded video, which is the liverail ads video in this case.
+    if ((!isIphone) || ((isIphone) && (main_video_played))) {
+      player.removeEventListener('play', startPreroll, true);
+    }
+    if ((isIphone) && (main_video_played)) {
+      //console.log('now playing main video....!!! on iphone');
+      preroll_played = false; // resets preroll flag
+      player.load();
+      // this play will 'force' flowplayer to load new duration:
+      flowplayer().play();
+      player.addEventListener("loadedmetadata", function() {
+        player.play(); // this play will use the updated duration
+      });
+    } // end of work-around
+
+    adManager.startAds();
+    preroll_played = true;
+
+    // if playlist, register "ended" event on main video
+    if (typeof HTML5_PLAYER != "undefined") {
+      player.addEventListener('ended', function() {
+        this.removeEventListener('ended');
+        main_video_played = true;
+      }, true);
+    }
+  };
+  player.addEventListener('play', startPreroll, true);
+}
+
+
+
+/* start yume ad integration setup */
+
+var current_video_src = "";
+var yumeSDKInstance = null;
+var yumeInitObj = null;
+var html5_video_id = null;
+var anchor_tag_id = null;
+var yume_video_element = null;
+
+YuMe = {
+  yumeSetup: function (player_id, domain_id, url, qs_params, html5_video_div_id, click_tag_href_id, autoplay_preroll) {
+    // reset boolean flags
+    main_video_played = false;
+
+    autoplay_preroll = typeof autoplay_preroll !== 'undefined' ? autoplay_preroll : true;
+
+    if (yumeSDKInstance === null) {
+      yumeSDKInstance = new YuMeHTML5SDK();
+    }
+    if (yumeInitObj === null) {
+      yumeInitObj = new YuMeHTML5SDKInitObject();
+    }
+    yumeInitObj.adDomainUrl = url;
+    yumeInitObj.domainId = domain_id;
+    yumeInitObj.qsParams = qs_params;
+    yumeInitObj.html5VideoId = player_id;
+    // saves the video_id (will be used later in ad event listener method):
+    html5_video_id = player_id;
+    yumeInitObj.html5VideoDivId = html5_video_div_id;
+    yumeInitObj.clickTagHRefId = click_tag_href_id;
+    anchor_tag_id = click_tag_href_id; // saves the <a> tag's id
+    yumeInitObj.prerollPlaylist = "dynamic_preroll_playlist.json?";
+    yumeInitObj.midrollPlaylist = "dynamic_midroll_playlist.json?";
+    yumeInitObj.postrollPlaylist = "dynamic_postroll_playlist.json?";
+
+    yumeInitObj.bPrefetchMidrollAd = false;
+    yumeInitObj.bPrefetchPostrollAd = false;
+    // initialize yume sdk instance with the yumeInitObj
+    var bYumeSDKInit = yumeSDKInstance.yume_init(yumeInitObj);
+    //console.log("bYumeSDKInit = " + bYumeSDKInit + ", html5_video_id = " +
+    //  player_id + ", html5_video_div_id = " + html5_video_div_id +
+    //  ", click_tag_href_id = " + click_tag_href_id);
+    if(!bYumeSDKInit) {
+      alert("yume_init() failed !!!");
+      yume_createVideoControlBar(null);
+      return;
+    }
+
+    // add the video control bar
+    yume_createVideoControlBar(yumeSDKInstance);
+    // gets the video tag element
+    yume_video_element = document.getElementById(html5_video_id);
+    // starts playing the preroll ads if available with AutoPlay option
+    var osName = navigator.userAgent;
+    // this is for playlist with ads: on iphone, use playlist's play method
+    // instead.
+    if ((/ip(hone|od)/i.test(osName)) &&
+        (typeof HTML5_PLAYER != "undefined") &&
+        (!HTML5_PLAYER.playCalledOnce)         ) {
+      HTML5_PLAYER.play(0);
+    } else {
+      yume_load_video_content(autoplay_preroll);
+    }
+  },
+
+  //performs YuMe HTML5 SDK DeInitialization
+  deInitYuMeHTML5SDK: function () {
+    if(yumeSDKInstance) {
+      yumeSDKInstance.yume_deInit();
+    }
+  },
+
+  //function that listens for ad events from YuMe HTML5 SDK
+  yumeSDKAdEventListener: function (yume_event, yume_eventInfo) {
+    switch(yume_event) {
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_PRESENT:
+      yume_video_element.style.opacity = 100; // after ad loaded, shows the video
+      if(videoControlBar) {
+         //disables the progress bar when ad is playing:
+        videoControlBar.removeProgressHolderEventListeners();
+      }
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_ABSENT:
+      console.log('YuMe ads absent');
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_PLAYING:
+      console.log("YuMe ads playing");
+      if(videoControlBar) {
+        videoControlBar.updatePlayPauseControl();
+      }
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_COMPLETED:
+      console.log("YuMe ads completed");
+      if(videoControlBar) {
+        videoControlBar.resetControlBar();
+      }
+      // plays the main content only once
+      if (!main_video_played) {
+        playMainVideo();
+      }
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_ERROR:
+      console.log('YuMe ads error: ' + yume_eventInfo);
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_CLICKED2SITE:
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_CLICKED2VIDEO:
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.PIP_VIDEO_PLAYING:
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_CB_IFRAME:
+      break;
+    case YuMeHTML5SDK.prototype.yume_adEvent.AD_CB_FLASH:
+      break;
+    default:
+      break;
+    }
+  },
+
+  yume_load_video_content: function (autoplay) {
+    autoplay = typeof(autoplay) != "undefined" ? autoplay : false;
+    if(videoControlBar) {
+      videoControlBar.updatePlayPauseControl();
+    }
+
+    // saves the current source of main video #9988
+    current_video_src = yume_video_element.currentSrc;
+
+    yume_video_element.removeAttribute('src');
+    yume_video_element.controls = false; //init with no 'defaul' html5 control bar
+    yume_video_element.load();
+    if ((autoplay) ||
+        (typeof HTML5_PLAYER != "undefined") &&
+        (HTML5_PLAYER.playCalledOnce)          ) {
+      yume_video_element.play();
+    }
+
+    var yume_playPreRollAds = function () {
+      yume_video_element.removeEventListener('play', yume_playPreRollAds, true);
+      // temporarily hides the video while loading preroll ad block:
+      yume_video_element.style.opacity = 0;
+      // todo: add loader image
+      yume_video_element.pause();
+      if (yumeSDKInstance) {
+        console.log("yume_startAd");
+        preroll_played = true;
+        yumeSDKInstance.yume_startAd(YuMeHTML5SDK.prototype.yume_adBlockType.PREROLL_BLOCK);
+      }
+    };
+    yume_video_element.addEventListener('play', yume_playPreRollAds, true);
+  },
+
+  playMainVideo: function () {
+    // enables the progress bar (to be clickable)
+    if(videoControlBar) {
+      videoControlBar.addProgressHolderEventListeners();
+    }
+
+    // applies the source of main video back to the video element #9988:
+    yume_video_element.src = current_video_src;
+    // init with no 'defaul' html5 control bar:
+    yume_video_element.controls = false;
+    yume_video_element.load();
+
+    var yume_playPostRollAds = function () {
+      yume_video_element.removeEventListener('ended', yume_playPostRollAds, true);
+      if (yumeSDKInstance) {
+        yumeSDKInstance.yume_startAd(YuMeHTML5SDK.prototype.yume_adBlockType.POSTROLL_BLOCK);
+      }
+    };
+    // if not using with playlist, only play POSTROLL ad after the last video in
+    // the playlist
+    if ((typeof HTML5_PLAYER == "undefined")    ||
+       ((typeof HTML5_PLAYER != "undefined") &&
+         (HTML5_PLAYER.isAtLastItem())         )  ) {
+      yume_video_element.addEventListener('ended', yume_playPostRollAds, true);
+    }
+    yume_video_element.style.opacity = 100; // shows the video
+    main_video_played = true;
+    preroll_played = false;
+    yume_video_element.play();
+    if(videoControlBar) {
+      videoControlBar.updatePlayPauseControl();
+    }
+  },
+
+  yume_createVideoControlBar: function (yumeSDKInstanceObj) {
+    var videoControlBarInitObj = new VideoControlBarInitObject();
+    videoControlBarInitObj.videoId = html5_video_id;
+    videoControlBarInitObj.controlsId = "controls";
+    videoControlBarInitObj.playControlId = "play";
+    videoControlBarInitObj.progressControlId = "progress";
+    videoControlBarInitObj.progressHolderId = "progress_box";
+    videoControlBarInitObj.playProgressBarId = "play_progress";
+    videoControlBarInitObj.currentTimeDisplayId = "current_time_display";
+    videoControlBarInitObj.durationDisplayId = "duration_display";
+    videoControlBarInitObj.volumeControlId = "volume";
+    videoControlBarInitObj.volumeDisplayId = "volume_display";
+    videoControlBarInitObj.yumeSDKInstance = yumeSDKInstanceObj;
+
+    videoControlBar = new VideoControlBar(videoControlBarInitObj);
+  },
+
+  //function that listens for any volume changes
+  player_volumeChangeHandler: function (volControlId) {
+    if(videoControlBar) {
+      videoControlBar.updateVolume(volControlId);
+    }
+  },
+
+  /*
+    Cleans up the local setup of yume ads: clears out playlist, resets flags...
+    This function must be called before playing ads on a new video,
+    like in the case of clicking on thumbnail and immediately play a video with
+    ads in a playlist.
+  */
+  yume_adCleanup: function () {
+    if ((typeof yumeSDKInstance != "undefined") && (yumeSDKInstance)) {
+      yumeSDKInstance._yume_performLocalCleanup();
+      // // Cleans the playlist information stored during parsing playlists:
+      //yumeSDKInstance._yume_cleanPlaylistInfo();
+
+      // resets the ad requested flags (e.g. _yume_bPrerollRequested,
+      // _yume_bPostrollRequested...):
+      yumeSDKInstance._yume_resetAdRequestFlags();
+    }
+  }
+};
+
+// Temporary wrappers to avoid references conflicts with other files
+// (for YuMe)
+
+yumeSetup = YuMe.yumeSetup;
+yumeSDKAdEventListener = YuMe.yumeSDKAdEventListener;
+yume_load_video_content = YuMe.yume_load_video_content;
+playMainVideo = YuMe.playMainVideo;
+yume_createVideoControlBar = YuMe.yume_createVideoControlBar;
+player_volumeChangeHandler = YuMe.player_volumeChangeHandler;
+yume_adCleanup = YuMe.yume_adCleanup;
+
+/* end of yume ad intergration setup */
+
+
+
+/* Public Domain JSON conversion.  See http://www.JSON.org/js.html */
+if (!this.__JSON) {
+  __JSON = (function () {
+    function f(n) {    // Format integers to have at least two digits.
+      return n < 10 ? '0' + n : n;
+    }
+
+    Date.prototype.toJSON = function () {
+      // Eventually, this method will be based on the date.toISOString method.
+      return this.getUTCFullYear()   + '-' +
+        f(this.getUTCMonth() + 1) + '-' +
+        f(this.getUTCDate())      + 'T' +
+        f(this.getUTCHours())     + ':' +
+        f(this.getUTCMinutes())   + ':' +
+        f(this.getUTCSeconds())   + 'Z';
+    };
+
+    var m = {    // table of character substitutions
+      '\b': '\\b',
+      '\t': '\\t',
+      '\n': '\\n',
+      '\f': '\\f',
+      '\r': '\\r',
+      '"' : '\\"',
+      '\\': '\\\\'
+    };
+
+    function stringify(value, whitelist) {
+      var a,          // The array holding the partial texts.
+      i,          // The loop counter.
+      k,          // The member key.
+      l,          // Length.
+      r = /["\\\x00-\x1f\x7f-\x9f]/g,
+      v;          // The member value.
+
+      switch (typeof value) {
+      case 'string':
+        // If the string contains no control characters, no quote characters,
+        // and no backslash characters, then we can safely slap some quotes
+        // around it. Otherwise we must also replace the offending characters
+        // with safe sequences.
+        return r.test(value) ?
+          '"' + value.replace(r, function (a) {
+            var c = m[a];
+            if (c) {
+              return c;
+            }
+            c = a.charCodeAt();
+            return '\\u00' + Math.floor(c / 16).toString(16) +
+              (c % 16).toString(16);
+          }) + '"' :
+        '"' + value + '"';
+
+      case 'number':
+        // JSON numbers must be finite. Encode non-finite numbers as null.
+        return isFinite(value) ? String(value) : 'null';
+
+      case 'boolean':
+      case 'null':
+        return String(value);
+
+      case 'object':
+        // Due to a specification blunder in ECMAScript,
+        // typeof null is 'object', so watch out for that case.
+        if (!value) {
+          return 'null';
+        }
+        // If the object has a toJSON method, call it, and stringify the result.
+        /*
+         if (typeof value.toJSON === 'function') {
+         return stringify(value.toJSON());
+         }
+        */
+        a = [];
+        if (typeof value.length === 'number' &&
+          !(value.propertyIsEnumerable('length'))) {
+          // The object is an array. Stringify every element. Use null as a
+          // placeholder for non-JSON values.
+          l = value.length;
+          for (i = 0; i < l; i += 1) {
+            a.push(stringify(value[i], whitelist) || 'null');
+          }
+          // Join all of the elements together and wrap them in brackets.
+          return '[' + a.join(',') + ']';
+        }
+        if (whitelist) {
+          // If a whitelist (array of keys) is provided, use it to select the
+          // components of the object.
+          l = whitelist.length;
+          for (i = 0; i < l; i += 1) {
+            k = whitelist[i];
+            if (typeof k === 'string') {
+              v = stringify(value[k], whitelist);
+              if (v) {
+                a.push(stringify(k) + ':' + v);
+              }
+            }
+          }
+        } else {
+          // Otherwise, iterate through all of the keys in the object.
+          for (k in value) {
+            if (typeof k === 'string') {
+              v = stringify(value[k], whitelist);
+              if (v) {
+                a.push(stringify(k) + ':' + v);
+              }
+            }
+          }
+        }
+        // Join all of the member texts together and wrap them in braces.
+        return '{' + a.join(',') + '}';
+      }
+    }
+
+    return {
+      stringify: stringify
+    };
+  }());
+}
+
+
+
+/*
+ * A JavaScript implementation of the RSA Data Security, Inc. MD5 Message
+ * Digest Algorithm, as defined in RFC 1321.
+ * Version 2.1 Copyright (C) Paul Johnston 1999 - 2002.
+ * Other contributors: Greg Holt, Andrew Kepert, Ydnar, Lostinet
+ * Distributed under the BSD License
+ * See http://pajhome.org.uk/crypt/md5 for more info.
+ */
+
+Js_md5 = {
+  hex_md5: function(s){ return binl2hex(core_md5(str2binl(s), s.length * chrsz));},
+  b64_md5: function(s){ return binl2b64(core_md5(str2binl(s), s.length * chrsz));},
+  str_md5: function(s){ return binl2str(core_md5(str2binl(s), s.length * chrsz));},
+  hex_hmac_md5: function(key, data) { return binl2hex(core_hmac_md5(key, data)); },
+  b64_hmac_md5: function(key, data) { return binl2b64(core_hmac_md5(key, data)); },
+  str_hmac_md5: function(key, data) { return binl2str(core_hmac_md5(key, data)); },
+  md5_vm_test: function()
+  {
+    return hex_md5("abc") == "900150983cd24fb0d6963f7d28e17f72";
+  },
+  core_md5: function(x, len)
+  {
+    /* append padding */
+    x[len >> 5] |= 0x80 << ((len) % 32);
+    x[(((len + 64) >>> 9) << 4) + 14] = len;
+
+    var a =  1732584193;
+    var b = -271733879;
+    var c = -1732584194;
+    var d =  271733878;
+
+    for(var i = 0; i < x.length; i += 16)
+    {
+      var olda = a;
+      var oldb = b;
+      var oldc = c;
+      var oldd = d;
+
+      a = md5_ff(a, b, c, d, x[i+ 0], 7 , -680876936);
+      d = md5_ff(d, a, b, c, x[i+ 1], 12, -389564586);
+      c = md5_ff(c, d, a, b, x[i+ 2], 17,  606105819);
+      b = md5_ff(b, c, d, a, x[i+ 3], 22, -1044525330);
+      a = md5_ff(a, b, c, d, x[i+ 4], 7 , -176418897);
+      d = md5_ff(d, a, b, c, x[i+ 5], 12,  1200080426);
+      c = md5_ff(c, d, a, b, x[i+ 6], 17, -1473231341);
+      b = md5_ff(b, c, d, a, x[i+ 7], 22, -45705983);
+      a = md5_ff(a, b, c, d, x[i+ 8], 7 ,  1770035416);
+      d = md5_ff(d, a, b, c, x[i+ 9], 12, -1958414417);
+      c = md5_ff(c, d, a, b, x[i+10], 17, -42063);
+      b = md5_ff(b, c, d, a, x[i+11], 22, -1990404162);
+      a = md5_ff(a, b, c, d, x[i+12], 7 ,  1804603682);
+      d = md5_ff(d, a, b, c, x[i+13], 12, -40341101);
+      c = md5_ff(c, d, a, b, x[i+14], 17, -1502002290);
+      b = md5_ff(b, c, d, a, x[i+15], 22,  1236535329);
+
+      a = md5_gg(a, b, c, d, x[i+ 1], 5 , -165796510);
+      d = md5_gg(d, a, b, c, x[i+ 6], 9 , -1069501632);
+      c = md5_gg(c, d, a, b, x[i+11], 14,  643717713);
+      b = md5_gg(b, c, d, a, x[i+ 0], 20, -373897302);
+      a = md5_gg(a, b, c, d, x[i+ 5], 5 , -701558691);
+      d = md5_gg(d, a, b, c, x[i+10], 9 ,  38016083);
+      c = md5_gg(c, d, a, b, x[i+15], 14, -660478335);
+      b = md5_gg(b, c, d, a, x[i+ 4], 20, -405537848);
+      a = md5_gg(a, b, c, d, x[i+ 9], 5 ,  568446438);
+      d = md5_gg(d, a, b, c, x[i+14], 9 , -1019803690);
+      c = md5_gg(c, d, a, b, x[i+ 3], 14, -187363961);
+      b = md5_gg(b, c, d, a, x[i+ 8], 20,  1163531501);
+      a = md5_gg(a, b, c, d, x[i+13], 5 , -1444681467);
+      d = md5_gg(d, a, b, c, x[i+ 2], 9 , -51403784);
+      c = md5_gg(c, d, a, b, x[i+ 7], 14,  1735328473);
+      b = md5_gg(b, c, d, a, x[i+12], 20, -1926607734);
+
+      a = md5_hh(a, b, c, d, x[i+ 5], 4 , -378558);
+      d = md5_hh(d, a, b, c, x[i+ 8], 11, -2022574463);
+      c = md5_hh(c, d, a, b, x[i+11], 16,  1839030562);
+      b = md5_hh(b, c, d, a, x[i+14], 23, -35309556);
+      a = md5_hh(a, b, c, d, x[i+ 1], 4 , -1530992060);
+      d = md5_hh(d, a, b, c, x[i+ 4], 11,  1272893353);
+      c = md5_hh(c, d, a, b, x[i+ 7], 16, -155497632);
+      b = md5_hh(b, c, d, a, x[i+10], 23, -1094730640);
+      a = md5_hh(a, b, c, d, x[i+13], 4 ,  681279174);
+      d = md5_hh(d, a, b, c, x[i+ 0], 11, -358537222);
+      c = md5_hh(c, d, a, b, x[i+ 3], 16, -722521979);
+      b = md5_hh(b, c, d, a, x[i+ 6], 23,  76029189);
+      a = md5_hh(a, b, c, d, x[i+ 9], 4 , -640364487);
+      d = md5_hh(d, a, b, c, x[i+12], 11, -421815835);
+      c = md5_hh(c, d, a, b, x[i+15], 16,  530742520);
+      b = md5_hh(b, c, d, a, x[i+ 2], 23, -995338651);
+
+      a = md5_ii(a, b, c, d, x[i+ 0], 6 , -198630844);
+      d = md5_ii(d, a, b, c, x[i+ 7], 10,  1126891415);
+      c = md5_ii(c, d, a, b, x[i+14], 15, -1416354905);
+      b = md5_ii(b, c, d, a, x[i+ 5], 21, -57434055);
+      a = md5_ii(a, b, c, d, x[i+12], 6 ,  1700485571);
+      d = md5_ii(d, a, b, c, x[i+ 3], 10, -1894986606);
+      c = md5_ii(c, d, a, b, x[i+10], 15, -1051523);
+      b = md5_ii(b, c, d, a, x[i+ 1], 21, -2054922799);
+      a = md5_ii(a, b, c, d, x[i+ 8], 6 ,  1873313359);
+      d = md5_ii(d, a, b, c, x[i+15], 10, -30611744);
+      c = md5_ii(c, d, a, b, x[i+ 6], 15, -1560198380);
+      b = md5_ii(b, c, d, a, x[i+13], 21,  1309151649);
+      a = md5_ii(a, b, c, d, x[i+ 4], 6 , -145523070);
+      d = md5_ii(d, a, b, c, x[i+11], 10, -1120210379);
+      c = md5_ii(c, d, a, b, x[i+ 2], 15,  718787259);
+      b = md5_ii(b, c, d, a, x[i+ 9], 21, -343485551);
+
+      a = safe_add(a, olda);
+      b = safe_add(b, oldb);
+      c = safe_add(c, oldc);
+      d = safe_add(d, oldd);
+    }
+    return new Array(a, b, c, d);
+
+  },
+  md5_cmn: function(q, a, b, x, s, t)
+  {
+    return safe_add(bit_rol(safe_add(safe_add(a, q), safe_add(x, t)), s),b);
+  },
+  md5_ff: function(a, b, c, d, x, s, t)
+  {
+    return md5_cmn((b & c) | ((~b) & d), a, b, x, s, t);
+  },
+  md5_gg: function(a, b, c, d, x, s, t)
+  {
+    return md5_cmn((b & d) | (c & (~d)), a, b, x, s, t);
+  },
+  md5_hh: function(a, b, c, d, x, s, t)
+  {
+    return md5_cmn(b ^ c ^ d, a, b, x, s, t);
+  },
+  md5_ii: function(a, b, c, d, x, s, t)
+  {
+    return md5_cmn(c ^ (b | (~d)), a, b, x, s, t);
+  },
+  core_hmac_md5: function(key, data)
+  {
+    var bkey = str2binl(key);
+    if(bkey.length > 16) {
+      bkey = core_md5(bkey, key.length * chrsz);
+    }
+
+    var ipad = new Array(16), opad = new Array(16);
+    for(var i = 0; i < 16; i++)
+    {
+      ipad[i] = bkey[i] ^ 0x36363636;
+      opad[i] = bkey[i] ^ 0x5C5C5C5C;
+    }
+
+    var hash = core_md5(ipad.concat(str2binl(data)), 512 + data.length * chrsz);
+    return core_md5(opad.concat(hash), 512 + 128);
+  },
+  safe_add: function(x, y)
+  {
+    var lsw = (x & 0xFFFF) + (y & 0xFFFF);
+    var msw = (x >> 16) + (y >> 16) + (lsw >> 16);
+    return (msw << 16) | (lsw & 0xFFFF);
+  },
+  bit_rol: function(num, cnt)
+  {
+    return (num << cnt) | (num >>> (32 - cnt));
+  },
+  str2binl: function(str)
+  {
+    var bin = [];
+    var mask = (1 << chrsz) - 1;
+    for(var i = 0; i < str.length * chrsz; i += chrsz) {
+      bin[i>>5] |= (str.charCodeAt(i / chrsz) & mask) << (i%32);
+    }
+    return bin;
+  },
+  binl2str: function(bin)
+  {
+    var str = "";
+    var mask = (1 << chrsz) - 1;
+    for(var i = 0; i < bin.length * 32; i += chrsz) {
+      str += String.fromCharCode((bin[i>>5] >>> (i % 32)) & mask);
+    }
+    return str;
+  },
+  binl2hex: function(binarray)
+  {
+    var hex_tab = hexcase ? "0123456789ABCDEF" : "0123456789abcdef";
+    var str = "";
+    for(var i = 0; i < binarray.length * 4; i++)
+    {
+      str += hex_tab.charAt((binarray[i>>2] >> ((i%4)*8+4)) & 0xF) +
+        hex_tab.charAt((binarray[i>>2] >> ((i%4)*8  )) & 0xF);
+    }
+    return str;
+  },
+  binl2b64: function(binarray)
+  {
+    var tab = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    var str = "";
+    for(var i = 0; i < binarray.length * 4; i += 3)
+    {
+      var triplet = (((binarray[i   >> 2] >> 8 * ( i   %4)) & 0xFF) << 16)
+        | (((binarray[i+1 >> 2] >> 8 * ((i+1)%4)) & 0xFF) << 8 )
+        |  ((binarray[i+2 >> 2] >> 8 * ((i+2)%4)) & 0xFF);
+      for(var j = 0; j < 4; j++)
+      {
+        if(i * 8 + j * 6 > binarray.length * 32) {
+          str += b64pad;
+        } else {
+          str += tab.charAt((triplet >> 6*(3-j)) & 0x3F);
+        }
+      }
+    }
+    return str;
+  }
+};
+
+var hexcase = 0;  /* hex output format. 0 - lowercase; 1 - uppercase        */
+var b64pad  = ""; /* base-64 pad character. "=" for strict RFC compliance   */
+var chrsz   = 8;  /* bits per input character. 8 - ASCII; 16 - Unicode      */
+
+// Temporary wrappers to avoid references conflicts with other files
+// (for Js_md5)
+
+hex_md5 = Js_md5.hex_md5;
+b64_md5 = Js_md5.b64_md5;
+str_md5 = Js_md5.str_md5;
+hex_hmac_md5 = Js_md5.hex_hmac_md5;
+b64_hmac_md5 = Js_md5.b64_hmac_md5;
+str_hmac_md5 = Js_md5.str_hmac_md5;
+md5_vm_test = Js_md5.md5_vm_test;
+core_md5 = Js_md5.core_md5;
+md5_cmn = Js_md5.md5_cmn;
+md5_ff = Js_md5.md5_ff;
+md5_gg = Js_md5.md5_gg;
+md5_hh = Js_md5.md5_hh;
+md5_ii = Js_md5.md5_ii;
+core_hmac_md5 = Js_md5.core_hmac_md5;
+safe_add = Js_md5.safe_add;
+bit_rol = Js_md5.bit_rol;
+str2binl = Js_md5.str2binl;
+binl2str = Js_md5.binl2str;
+binl2hex = Js_md5.binl2hex;
+binl2b64 = Js_md5.binl2b64;

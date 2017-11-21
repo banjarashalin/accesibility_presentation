@@ -1,0 +1,64 @@
+
+<!-- saved from url=(0182)https://neo.pearson.com/standalone-video-player.jspa?videoId=3db3bfc9babb7&width=494&height=279&authtoken=decf9840806a161c18c218c65913c94246043dc742412064c1a58eebdc4cca96&inline=true -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style>
+        body {
+            margin:0;
+            padding:0;
+            text-align:center;
+            background: #000;
+        }
+        body video,
+        body object {
+            margin: auto;
+            width: 100%;
+            height: 100%;
+        }
+        body > * {
+            margin: auto;
+        }
+    </style><style>
+                video::-internal-media-controls-download-button {
+                    display:none;
+                }
+
+                video::-webkit-media-controls-enclosure {
+                    overflow:hidden;
+                }
+
+                video::-webkit-media-controls-panel {
+                    width: calc(100% + 30px);
+                }
+           </style><script type="text/javascript" src="./script"></script><script type="text/javascript">viewNode('3db3bfc9babb7', {server_detection: true, width: '494', height: '279', player_profile: '2016_1_0', auth_token: 'decf9840806a161c18c218c65913c94246043dc742412064c1a58eebdc4cca96', autoplay: 'false', logo_image_url: 'https://neo.pearson.com/servlet/JiveServlet/downloadImage/1101-1-288349/Watermark+37+x18.png'}); if (!false) {var documentVideoInterval = setInterval(function () {var videos = document.getElementsByTagName('video'); if (videos.length > 0) {clearInterval(documentVideoInterval); videos[0].oncontextmenu = function() { return false };}}, 100)}</script><script type="text/javascript" charset="utf-8" src="./18c16450f13162a4ad8a646996888f80-2016_1_0.json"></script></head><body><video width="494" height="279" controls="" poster="https://video-svc.jivesoftware.com:443/videos/3db3bfc9babb7/screenshots/494w279h.jpg" id="embedded_player_3db3bfc9babb7"><source src="https://video-svc.jivesoftware.com/videos/3db3bfc9babb7/assets/12474975/play.mp4?auth_token=decf9840806a161c18c218c65913c94246043dc742412064c1a58eebdc4cca96&amp;logo_image_url=https%3A%2F%2Fneo.pearson.com%2Fservlet%2FJiveServlet%2FdownloadImage%2F1101-1-288349%2FWatermark%2B37%2Bx18.png&amp;"></video><script type="text/javascript" src="./hit(3)"></script><script type="text/javascript">
+    video = document.getElementById("embedded_player_3db3bfc9babb7");
+    video.addEventListener('ended',function(){
+      fallback_playhead_event();
+    });
+    window.onbeforeunload = function() {
+      fallback_playhead_event();
+    };
+    window.onpagehide = function(){
+      if ("Macintosh_Chrome".includes("iPhone") || "Macintosh_Chrome".includes("iPad") || "Macintosh_Chrome".includes("iPod")){
+            fallback_playhead_event();
+      }
+    };
+
+function fallback_playhead_event(){
+    video = document.getElementById("embedded_player_3db3bfc9babb7");
+    duration = video.duration;
+    position = video.currentTime;
+    if (duration > 0 & position >0) {
+    percentage = (position/duration * 100).toFixed(0);
+    playhead_url = "https://elb-stats-ue1.twistage.com:443/collector/playhead?player_profile=2016_1_0&id=3db3bfc9babb7&3db3bfc9babb7=" + percentage + ",0" ;
+    var xmlhttp = null;
+		if (window.XMLHttpRequest) {
+      xmlhttp=new XMLHttpRequest();
+    } else{
+      xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
+    }
+    xmlhttp.open("GET", playhead_url, false);
+    xmlhttp.send();
+    }
+}
+
+</script>
+</body></html>

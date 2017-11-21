@@ -1,0 +1,11 @@
+var embedCode = "<video width=\"494\" height=\"279\" controls  poster=\"https://video-svc.jivesoftware.com:443/videos/8e9ffe06bb548/screenshots/494w279h.jpg\"  id=\"embedded_player_8e9ffe06bb548\"><source src=\"https://video-svc.jivesoftware.com/videos/8e9ffe06bb548/assets/12474937/play.mp4?CONFIG_PARAM\"/><\/video><script type=\"text/javascript\" src=\"https://elb-stats-ue1.twistage.com:443/collector/hit?asset_id=12474937&id=8e9ffe06bb548&embed_location=https://neo.pearson.com/standalone-video-player.jspa\"/><\/script><script type=\"text/javascript\">\n    video = document.getElementById(\"embedded_player_8e9ffe06bb548\");\n    video.addEventListener(\'ended\',function(){\n      fallback_playhead_event();\n    });\n    window.onbeforeunload = function() {\n      fallback_playhead_event();\n    };\n    window.onpagehide = function(){\n      if (\"Macintosh_Chrome\".includes(\"iPhone\") || \"Macintosh_Chrome\".includes(\"iPad\") || \"Macintosh_Chrome\".includes(\"iPod\")){\n            fallback_playhead_event();\n      }\n    };\n\nfunction fallback_playhead_event(){\n    video = document.getElementById(\"embedded_player_8e9ffe06bb548\");\n    duration = video.duration;\n    position = video.currentTime;\n    if (duration > 0 && position >0) {\n    percentage = (position/duration * 100).toFixed(0);\n    playhead_url = \"https://elb-stats-ue1.twistage.com:443/collector/playhead?player_profile=2016_1_0&id=8e9ffe06bb548&8e9ffe06bb548=\" + percentage + \",0\" ;\n    var xmlhttp = null;\n		if (window.XMLHttpRequest) {\n      xmlhttp=new XMLHttpRequest();\n    } else{\n      xmlhttp=new ActiveXObject(\"Microsoft.XMLHTTP\");\n    }\n    xmlhttp.open(\"GET\", playhead_url, false);\n    xmlhttp.send();\n    }\n}\n\n<\/script>\n";
+var additionalFlashvarsString = "&";
+for (var key in additionalFlashvars) {
+  additionalFlashvarsString += encodeURIComponent(key) + "=" + encodeURIComponent(additionalFlashvars[key]) + "&";
+}
+embedCode = embedCode.replace(/CONFIG_PARAM/g, additionalFlashvarsString);
+embedCode = embedCode.replace(/&&/g, "&");
+embedCode = embedCode.replace(/\?&/g, "?");
+embedCode = embedCode.replace(/\?"/g, "\"");
+
+  document.write(embedCode);
